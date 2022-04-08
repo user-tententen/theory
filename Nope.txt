@@ -1,0 +1,166 @@
+Prac4 Similarity
+import numpy as np
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+def process(raw):
+    with open(raw) as raw:
+        raw= raw.read()
+
+    stop_words= set(stopwords.words('english'))
+    word_tokens= word_tokenize(raw)
+    porter= nltk.stem.porter.PorterStemmer()
+    count = nltk.defaultdict(int)
+
+    words=[]
+    for w in word_tokens:
+        if w not in stop_words:
+            words.append(w)
+            
+    stemmed_tokens=[porter.stem(t) for t in words]
+
+    for word in stemmed_tokens:
+        count[word] += 1
+    return count
+
+def cosine(a,b):
+    return np.dot(a,b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def getSimilarity(dict1, dict2):
+    all_words_list = []
+    for key in dict1.keys():
+        all_words_list.append(key)
+    for key in dict2.keys():
+        all_words_list.append(key)
+
+    v1 = np.zeros(len(all_words_list))
+    v2 = np.zeros(len(all_words_list))
+
+    for index, key in enumerate(all_words_list):
+        v1[index] = dict1.get(key,0)
+        v2[index] = dict2.get(key,0)
+    return cosine(v1,v2)
+
+if __name__=='__main__':
+    dict1 = process("text1.txt")
+    dict2 = process("text2.txt")
+    print(getSimilarity(dict1,dict2))
+    
+===============================================================================================
+
+Prac6 webcrawler
+from html.parser import HTMLParser
+from urllib.request import urlopen
+from urllib import parse
+
+class LinkParser(HTMLParser):
+    def getLinks(self,url):
+        self.links=[]
+        self.baseUrl=url
+        response=urlopen(url)
+        if response.getheader('Content-Type')=='text/html':
+            htmlBytes=response.read()
+            htmlString=htmlBytes.decode('utf-8')
+            self.feed(htmlString)
+            return htmlString,self.links
+        else:
+            return "",[]
+def spider(url,word,maxPages):
+        pagesToVisit=[url]
+        numberVisited=0
+        foundWord=False
+        
+        while numberVisited < maxPages and pagesToVisit !=[] and not foundWord:
+            numberVisited=numberVisited+1
+            url=pagesToVisit[0]
+            pagesToVisit=pagesToVisit[1:]
+            
+            try:
+                print(numberVisited,'Visited:',url)
+                parser=LinkParser()
+                data,links=parser.getLinks(url)
+                #data,links=parser.getLinks(url)
+                if data.find(word)>-1:
+                    foundWord=True
+                    
+                pagesToVisit=pagesToVisit + links
+                print("**Success!**")
+            except:
+                print("**Failed!**")
+        if foundWord:
+            print('The word ',word,' was found at',url)
+        else:
+            print('Word never found!')
+                        
+spider("http://www.dreamhost.com","search",100)
+=============================================================================================
+
+Prac7 PageRank
+import numpy as np
+from scipy.sparse import csc_matrix
+def pageRank(G, s=0.85, maxerr=0.0001):
+    n = G.shape[0]
+    A = csc_matrix(G,dtype=float)
+    rsums = np.array(A.sum(1))[:,0]
+    ri, ci = A.nonzero()
+    A.data /= rsums[ri]
+    sink = rsums == 0
+
+    ro, r = np.zeros(n), np.ones(n)
+    while np.sum(np.abs(r-ro)) > maxerr:
+        ro = r.copy()
+        for i in range(0,n):
+            Ai = np.array(A[:,1].todense())[:,0]
+            Di = sink / float(n)
+            Ei = np.ones(n) / float(n)
+            r[i] = ro.dot(Ai*s+Di*s+Ei*(1-s))
+        return r / float(sum(r))
+    
+if __name__ == '__main__':
+    G = np.array([[0,0,1,0,0,0,0],[0,1,1,0,0,0,0],[1,0,1,1,0,0,0],[0,0,0,1,1,0,0],[0,0,0,0,0,0,1],[0,0,0,0,0,1,1],[0,0,0,1,1,0,1]])
+    print(pageRank(G,s=0.85))
+====================================================================================================================================
+
+Prac8 rss
+import requests
+import xml.etree.ElementTree as ET
+import csv
+
+def loadRSS():
+    url = 'http://hindustantimes.com/rss/topnews/rssfeed.xml'
+    resp = requests.get(url)
+    with open('topnewsfeed.xml', 'wb') as f:
+        f.write(resp.content)
+
+def parseXML(xmlfile):
+    tree = ET.parse(xmlfile)
+    root = tree.getroot()
+    newsitems = []
+
+    for item in root.findall('./channel/item'):
+        news = {}
+        for child in item:
+            if child.tag == '{http://search.yahoo.com/mrss/}content':
+                news['media'] = child.attrib['url']
+            elif child.text is not None:
+                news[child.tag] = child.text.encode('utf-8')
+            else:
+                newsitems.append(news)
+    return newsitems
+
+def savetoCSV(newsitems, filename):
+    fields = ['guide', 'title', 'pubDate', 'description', 'link', 'media']
+
+    with open(filename, 'w') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(newsitems)
+
+loadRSS()
+newsitems = parseXML('topnewsfeed.xml')
+savetoCSV(newsitems, 'topnews.csv')
+
+
+
+    
